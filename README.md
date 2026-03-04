@@ -63,15 +63,13 @@ https://ieeexplore.ieee.org/document/5674028
 ### CMake 配置
 
 在构建前，请修改 `CMakePresets.json` 中的工具链路径：
-
-```json
-"CMAKE_TOOLCHAIN_FILE": "D:/vcpkg/scripts/buildsystems/vcpkg.cmake"
-
-将其替换为本地 vcpkg 安装路径。
+'''
+"CMAKE_TOOLCHAIN_FILE": "yours/vcpkg/scripts/buildsystems/vcpkg.cmake"
+'''
 
 ---
 
-## 4. 示例数据
+## 3. 配置与依赖
 
 仓库中包含一个示例模型：
 
