@@ -1,0 +1,27 @@
+# VS
+.vs/
+
+# build
+out/
+build/
+CMakeFiles/
+CMakeCache.txt
+*.obj
+*.o
+*.exe
+*.dll
+*.so
+*.a
+
+# assets
+assets/*
+!assets/
+!assets/car.ply
+
+# runtime
+.polyscope.ini
+imgui.ini
+
+# OS
+.DS_Store
+Thumbs.db
