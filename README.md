@@ -75,7 +75,9 @@ https://ieeexplore.ieee.org/document/5674028
 
 仓库中包含一个示例模型：
 
+```
 assets/car.ply
+```
 
 其他测试数据未包含在仓库中。
 
@@ -83,4 +85,4 @@ assets/car.ply
 
 ## 5. 后续计划
 
-后续将提供可直接运行的 .exe 可执行文件版本。
+后续将提供可直接运行的 `.exe` 可执行文件版本。
