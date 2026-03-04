@@ -69,6 +69,8 @@ https://ieeexplore.ieee.org/document/5674028
 
 将其替换为本地 vcpkg 安装路径。
 
+---
+
 ## 4. 示例数据
 
 仓库中包含一个示例模型：
@@ -76,6 +78,8 @@ https://ieeexplore.ieee.org/document/5674028
 assets/car.ply
 
 其他测试数据未包含在仓库中。
+
+---
 
 ## 5. 后续计划
 
