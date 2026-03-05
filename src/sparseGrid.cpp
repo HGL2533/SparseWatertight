@@ -135,15 +135,15 @@ void SparseSDFGrid::build(const Eigen::MatrixXd& V, const Eigen::MatrixXi& F, in
     grid_origin = min_point - Eigen::RowVector3d::Constant(origin_padding);
 
     // ==========================================================
-    // 🚀 [瘦身核心 1] 扩大基础判定盒，替代昂贵的后处理膨胀
+    // 扩大基础判定盒，替代昂贵的后处理膨胀
     // 原来是 0.5 * cell_size (刚好贴合体素)，现在设为 1.0 * cell_size。
-    // 这相当于让相交判定自带了 0.5 个 cell_size 的容错光环，
+    // 这相当于让相交判定自带了 0.5 个 cell_size 的容错，
     // 刚好覆盖了后续 eps = 0.5 * cell_size 的等值面偏移。
     // ==========================================================
     const int GRID_PADDING = 2; // 稍微调大一点保证循环边界安全
     Eigen::RowVector3d box_half = Eigen::RowVector3d::Constant(1.0 * cell_size);
 
-    // 直接用 unordered_set 去重收集，这就是最终的 active_cells!
+    // 直接用 unordered_set 去重收集，得到最终的 active_cells
     std::unordered_set<Eigen::RowVector3i, Vector3iHash> tight_cell_set;
 
     for (int f = 0; f < F.rows(); ++f) {
@@ -164,7 +164,7 @@ void SparseSDFGrid::build(const Eigen::MatrixXd& V, const Eigen::MatrixXi& F, in
             for (int j = idx_min.y(); j <= idx_max.y(); ++j) {
                 for (int k = idx_min.z(); k <= idx_max.z(); ++k) {
                     Eigen::RowVector3d box_center = grid_origin + (Eigen::RowVector3d(i, j, k) + Eigen::RowVector3d(0.5, 0.5, 0.5)) * cell_size;
-                    // 使用放大后的 box_half 进行测试，相交的直接就是我们需要的
+                    // 使用放大后的 box_half 进行测试
                     if (triBoxOverlap(box_center, box_half, v0, v1, v2)) {
                         tight_cell_set.insert(Eigen::RowVector3i(i, j, k));
                     }
@@ -173,10 +173,6 @@ void SparseSDFGrid::build(const Eigen::MatrixXd& V, const Eigen::MatrixXi& F, in
         }
     }
 
-    // ==========================================================
-    // 🚀 [瘦身核心 2] 彻底删除那 27 次循环的暴力 Dilation 代码！
-    // 将精确胖相交的结果直接赋予 active_cells
-    // ==========================================================
     active_cells.assign(tight_cell_set.begin(), tight_cell_set.end());
 
     // 收集角点节点 (保持不变)
@@ -280,13 +276,12 @@ void SparseSDFGrid::compute_sdf_values_floodfill(const Eigen::MatrixXd& V, const
 void SparseSDFGrid::compute_sdf_values_windingnumber(const Eigen::MatrixXd& V, Eigen::MatrixXi& F, double threshold) {
     if (sparse_nodes.empty()) return;
 
-    // 0. winding number计算依赖于mesh是已定向的
-    //Eigen::MatrixXi Fnew;
+    // winding number计算依赖于mesh是已定向的, 进行重定向操作
     Eigen::VectorXi C;
     igl::embree::reorient_facets_raycast(V, F, F, C);
     std::cout << "[reorient]   over!" << std::endl;
 
-    // 1. 准备采样点坐标 (使用 Vector3d 列向量)
+    // 准备采样点坐标
     int num_nodes = sparse_nodes.size();
     Eigen::MatrixXd P(num_nodes, 3);
     std::vector<Eigen::Vector3i> map_keys;
@@ -300,19 +295,12 @@ void SparseSDFGrid::compute_sdf_values_windingnumber(const Eigen::MatrixXd& V, E
         row++;
     }
 
-
-    // 3. ✨ Fast Winding Number (FWN) 计算符号
-    // W 的值通常在 0 (绝对外部) 到 1 (绝对内部) 之间
     Eigen::VectorXd W;
     igl::fast_winding_number(V, F, P, W);
-    // 4. 将 FWN 与绝对距离结合，生成真正的 SDF
-    // 逻辑：W >= 0.5 认为在内部 (-)，否则在外部 (+)
+    // W >= 0.5 认为在内部 (-)，否则在外部 (+)
     for (int i = 0; i < num_nodes; ++i) {
         Eigen::RowVector3i row_key = map_keys[i].transpose();
         GridNode& node = sparse_nodes[row_key];
-
-
-        // 关键判定：环绕数阈值设为 0.5
         if (W(i) >= threshold) {
             node.sdf = -1.0; // 内部
         }
@@ -345,7 +333,7 @@ void SparseSDFGrid::bilateral_mesh_denoise(Eigen::MatrixXd& V, Eigen::MatrixXi& 
     igl::barycenter(V, F, FaceCenter);
 
     // ==========================================================
-    // 🚀 质量优化：构建 1-Ring 面邻域 (扩大感受野)
+    // 质量优化：构建 1-Ring 面邻域
     // ==========================================================
     std::vector<std::vector<int>> FF_1ring(num_faces);
     double SigmaCenter = 0.0;
@@ -373,16 +361,13 @@ void SparseSDFGrid::bilateral_mesh_denoise(Eigen::MatrixXd& V, Eigen::MatrixXi& 
     }
     SigmaCenter /= (double)edge_count;
 
-    // ==========================================================
-    // 🚀 速度优化 1：预计算绝对不变的“空间权重 (Spatial Weight)”
-    // ==========================================================
+
     std::vector<std::vector<double>> Precomputed_Ws_Area(num_faces);
     for (int i = 0; i < num_faces; ++i) {
         Precomputed_Ws_Area[i].resize(FF_1ring[i].size());
         for (size_t k = 0; k < FF_1ring[i].size(); ++k) {
             int nei_f = FF_1ring[i][k];
             double delta_center = (FaceCenter.row(i) - FaceCenter.row(nei_f)).norm();
-            // 预先算好耗时的 exp 和面积乘积
             Precomputed_Ws_Area[i][k] = Area(nei_f) * std::exp(-(delta_center * delta_center) / (2 * SigmaCenter * SigmaCenter));
         }
     }
@@ -390,13 +375,11 @@ void SparseSDFGrid::bilateral_mesh_denoise(Eigen::MatrixXd& V, Eigen::MatrixXi& 
     Eigen::MatrixXd NewNormal;
     igl::per_face_normals(V, F, NewNormal);
 
-    // ==========================================================
-    // 阶段 1：过滤面法线 (Bilateral Normal Filtering)
-    // ==========================================================
+
     for (int iter = 0; iter < NormalIterNum; ++iter) {
         Eigen::MatrixXd TempNormal = NewNormal;
 
-        // 🚀 速度优化 2：多线程并发过滤法线
+        // 多线程并发过滤法线
 #pragma omp parallel for num_threads(12)
         for (int i = 0; i < num_faces; ++i) {
             Eigen::RowVector3d N_sum = Eigen::RowVector3d::Zero();
@@ -425,7 +408,7 @@ void SparseSDFGrid::bilateral_mesh_denoise(Eigen::MatrixXd& V, Eigen::MatrixXi& 
     }
 
     // ==========================================================
-    // 阶段 2：根据新法线更新顶点位置 (Vertex Position Updating)
+    // 根据新法线更新顶点位置
     // ==========================================================
     for (int iter = 0; iter < VertexIterNum; ++iter) {
         Eigen::MatrixXd V_new = V;
@@ -433,7 +416,7 @@ void SparseSDFGrid::bilateral_mesh_denoise(Eigen::MatrixXd& V, Eigen::MatrixXi& 
         // 顶点变了，面中心必须重新算
         igl::barycenter(V, F, FaceCenter);
 
-        // 🚀 速度优化 3：多线程并发更新顶点
+        // 多线程并发更新顶点
 #pragma omp parallel for num_threads(12)
         for (int i = 0; i < num_verts; ++i) {
             Eigen::RowVector3d delta_xi = Eigen::RowVector3d::Zero();
@@ -456,7 +439,7 @@ void SparseSDFGrid::bilateral_mesh_denoise(Eigen::MatrixXd& V, Eigen::MatrixXi& 
 
 
 
-// 辅助结构：记录提取的 Mesh 顶点是由哪两个体素角点插值而来的
+// 记录提取的 Mesh 顶点是由哪两个体素角点插值而来的
 struct VertexGridBinding {
     int idA = -1;
     int idB = -1;
@@ -464,12 +447,12 @@ struct VertexGridBinding {
 };
 
 void SparseSDFGrid::optimize_grid(const Eigen::MatrixXd& V_target, const Eigen::MatrixXi& F_target, int iters, double lr) {
-    // 1. 提取固定拓扑的初始马赛克网格
+    // 提取固定拓扑的初始二值化SDF的网格
     Eigen::MatrixXd V_ext;
     Eigen::MatrixXi F_ext;
     extract_mesh_mc(V_ext, F_ext, 0.0);
     // ==========================================================
-    // 🚀 性能优化 1：内存展平 (Flatten Hashmap)
+    // 内存展平 (Flatten Hashmap)
     // ==========================================================
     int num_nodes = sparse_nodes.size();
     std::unordered_map<Eigen::RowVector3i, int, Vector3iHash> key_to_id;
@@ -542,13 +525,11 @@ void SparseSDFGrid::optimize_grid(const Eigen::MatrixXd& V_target, const Eigen::
         for (int i = 0; i < num_ext_verts; ++i) {
             if (!bindings[i].valid) continue;
 
-            //// 1. 绝对安全的 UDF 力：真实物理拉扯 (Point-to-Point)
-            //// 不使用点到面投影，防止在 3D 自由状态下网格顶点无限滑移撕裂
+            //// 1. 单纯的方向投影，但是单层结构会产生紧贴的double mesh
             //Eigen::RowVector3d dir_udf = C_nearest.row(i) - V_current.row(i);
             
-            // ==========================================================
+            
             // 处理带有明显*单层开放面*的结果时可以使用，进行双层化处理
-            // ==========================================================
             Eigen::RowVector3d diff = C_nearest.row(i) - V_current.row(i);
             double dist = diff.norm();
 
@@ -558,15 +539,10 @@ void SparseSDFGrid::optimize_grid(const Eigen::MatrixXd& V_target, const Eigen::
 
             Eigen::RowVector3d dir_udf = Eigen::RowVector3d::Zero();
             if (dist > 1e-8) {
-                // 魔法就在这里：(dist - margin)
-                // 如果 dist > margin，算出来是正的，向内拉扯
-                // 如果 dist < margin，算出来是负的，向外推开！(防止坠毁撞车)
+                // 如果 dist < margin，算出来是负的，向外推开,防止重合
                 dir_udf = diff * ((dist - margin) / dist);
             }
 
-
-
-            // 2. 均匀拉普拉斯平滑力 (Uniform Laplacian)
             Eigen::RowVector3d dir_laplacian = Eigen::RowVector3d::Zero();
             if (!A[i].empty()) {
                 Eigen::RowVector3d centroid = Eigen::RowVector3d::Zero();
@@ -577,7 +553,6 @@ void SparseSDFGrid::optimize_grid(const Eigen::MatrixXd& V_target, const Eigen::
                 dir_laplacian = centroid - V_current.row(i);
             }
 
-            // 3. 混合物理引力与拉普拉斯力
             Eigen::RowVector3d total_direction = dir_udf + lambda_laplacian * dir_laplacian;
 
             int idA = bindings[i].idA;
@@ -589,16 +564,11 @@ void SparseSDFGrid::optimize_grid(const Eigen::MatrixXd& V_target, const Eigen::
             grad_count[idB] += 1;
         }
 
-        // ==========================================================
-        // 🚀 执行自由 3D 移动，直接更新底层角点坐标
-        // ==========================================================
 #pragma omp parallel for num_threads(12)
         for (int k = 0; k < num_nodes; ++k) {
             if (grad_count[k] > 0) {
-                // 计算平均梯度 (纯 3D 向量)
                 Eigen::RowVector3d raw_grad = grad_accum[k] / double(grad_count[k]);
-
-                // 直接在 3D 空间中移动体素角点 (取消了 fixed_dir 投影)
+                // 直接在 3D 空间中移动体素角点
                 *(node_pos_ptrs[k]) += lr * raw_grad;
             }
         }
@@ -608,10 +578,9 @@ void SparseSDFGrid::optimize_grid(const Eigen::MatrixXd& V_target, const Eigen::
 }
 
 
-// 在 SparseSDFGrid 类内部
 void SparseSDFGrid::extract_mesh(Eigen::MatrixXd& V_out, Eigen::MatrixXi& F_out) {
     // =========================================================
-    // 1. 扁平化数据 (Map -> Matrix) & 构建边 (GI)
+    // 扁平化数据 (Map -> Matrix) & 构建边 (GI)
     // =========================================================
     int num_nodes = sparse_nodes.size();
     Eigen::VectorXd Gf(num_nodes);
@@ -655,7 +624,7 @@ void SparseSDFGrid::extract_mesh(Eigen::MatrixXd& V_out, Eigen::MatrixXi& F_out)
     for (size_t i = 0; i < edges.size(); ++i) GI.row(i) = edges[i];
 
     // =========================================================
-    // 2. 定义插值函数 (不再查 Mesh，而是查 Grid)
+    // 定义插值函数 (不再查 Mesh，而是查 Grid)
     // =========================================================
 
     // 辅助 lambda: 三线性插值
@@ -667,16 +636,16 @@ void SparseSDFGrid::extract_mesh(Eigen::MatrixXd& V_out, Eigen::MatrixXi& F_out)
         // p 是 1x3, grid_origin 是 1x3, 结果保持 1x3
         Eigen::RowVector3d local_pos = (p - grid_origin) / cell_size;
 
-        // 2. 找到左下角索引 (base index)
+        //找到左下角索引 (base index)
         Eigen::RowVector3i base_idx;
         base_idx(0) = std::floor(local_pos(0));
         base_idx(1) = std::floor(local_pos(1));
         base_idx(2) = std::floor(local_pos(2));
 
-        // [修复点 2]: 现在 local_pos 和 base_idx 都是 1x3，可以直接相减
+        // 修复: 现在 local_pos 和 base_idx 都是 1x3，可以直接相减
         Eigen::RowVector3d t = local_pos - base_idx.cast<double>();
 
-        // 4. 获取 8 个邻居的值
+        //获取 8 个邻居的值
         double v[8];
         Eigen::RowVector3d n[8];
 
@@ -692,7 +661,6 @@ void SparseSDFGrid::extract_mesh(Eigen::MatrixXd& V_out, Eigen::MatrixXi& F_out)
                         n[index] = it->second.normal;
                     }
                     else {
-                        // 默认值处理：如果在窄带外，给予一个较大的 SDF 值
                         v[index] = 10.0;
                         n[index] = Eigen::RowVector3d::Zero();
                     }
@@ -700,20 +668,18 @@ void SparseSDFGrid::extract_mesh(Eigen::MatrixXd& V_out, Eigen::MatrixXi& F_out)
             }
         }
 
-        // 5. 三线性插值 SDF (标量插值)
-        // X轴
+        // 三线性插值 SDF (标量插值)
         double c00 = v[0] * (1.0 - t(0)) + v[1] * t(0);
         double c10 = v[2] * (1.0 - t(0)) + v[3] * t(0);
         double c01 = v[4] * (1.0 - t(0)) + v[5] * t(0);
         double c11 = v[6] * (1.0 - t(0)) + v[7] * t(0);
-        // Y轴
+        
         double c0 = c00 * (1.0 - t(1)) + c10 * t(1);
         double c1 = c01 * (1.0 - t(1)) + c11 * t(1);
-        // Z轴
+        
         double val = c0 * (1.0 - t(2)) + c1 * t(2);
 
-        // 6. 三线性插值 Normal (向量插值)
-        // Eigen 支持 向量 * 标量，以及 向量 + 向量
+        // 三线性插值 Normal (向量插值)
         Eigen::RowVector3d n00 = n[0] * (1.0 - t(0)) + n[1] * t(0);
         Eigen::RowVector3d n10 = n[2] * (1.0 - t(0)) + n[3] * t(0);
         Eigen::RowVector3d n01 = n[4] * (1.0 - t(0)) + n[5] * t(0);
@@ -727,24 +693,20 @@ void SparseSDFGrid::extract_mesh(Eigen::MatrixXd& V_out, Eigen::MatrixXi& F_out)
         return { val, norm };
         };
 
-    // 定义回调函数 f
+
     auto f_func = [&](const Eigen::Matrix<double, 1, 3>& p) -> double {
         return interpolate_grid(p).first;
         };
 
-    // 定义回调函数 f_grad
+
     auto f_grad_func = [&](const Eigen::Matrix<double, 1, 3>& p) -> Eigen::Matrix<double, 1, 3> {
         Eigen::RowVector3d grad = interpolate_grid(p).second;
-        // 梯度需要归一化
         if (grad.squaredNorm() > 1e-10) {
             grad.normalize();
         }
         return grad;
         };
 
-    // =========================================================
-    // 3. 执行 Dual Contouring
-    // =========================================================
     Eigen::RowVector3d step(cell_size, cell_size, cell_size);
 
     igl::dual_contouring(
@@ -762,11 +724,10 @@ void SparseSDFGrid::extract_mesh(Eigen::MatrixXd& V_out, Eigen::MatrixXi& F_out)
     );
 }
 
-// Marching Cubes 提取网格
 void SparseSDFGrid::extract_mesh_mc(Eigen::MatrixXd& V_out, Eigen::MatrixXi& F_out, double isovalue)
 {
     // =========================================================
-    // 1. 扁平化数据 (Map -> Linear Arrays S & GV)
+    // 扁平化数据 (Map -> Linear Arrays S & GV)
     // =========================================================
     int num_nodes = sparse_nodes.size();
 
@@ -787,20 +748,12 @@ void SparseSDFGrid::extract_mesh_mc(Eigen::MatrixXd& V_out, Eigen::MatrixXi& F_o
         idx++;
     }
 
-    // =========================================================
-    // 2. 构建 GI (Grid Indices) - 定义每个 Cell 的 8 个角点
-    // =========================================================
-    // Libigl Marching Cubes 期望的顶点顺序通常是：
-    // Bottom: 0:(0,0,0), 1:(1,0,0), 2:(1,1,0), 3:(0,1,0)
-    // Top:    4:(0,0,1), 5:(1,0,1), 6:(1,1,1), 7:(0,1,1)
-
     // 定义 8 个角点的相对偏移量
     const int offset_x[8] = { 0, 1, 1, 0, 0, 1, 1, 0 };
     const int offset_y[8] = { 0, 0, 1, 1, 0, 0, 1, 1 };
     const int offset_z[8] = { 0, 0, 0, 0, 1, 1, 1, 1 };
 
     std::vector<Eigen::Matrix<int, 1, 8>> cells;
-    // 预估一下大小，如果是窄带，数量级和 active_cells 差不多
     cells.reserve(active_cells.size());
 
     // 遍历所有活跃的 Cell
@@ -839,7 +792,7 @@ void SparseSDFGrid::extract_mesh_mc(Eigen::MatrixXd& V_out, Eigen::MatrixXi& F_o
     std::cout << "MC Input: " << S.rows() << " vertices, " << GI.rows() << " cells." << "sdf max val: " << S.maxCoeff() << "sdf min val: " << S.minCoeff() << std::endl;
 
     // =========================================================
-    // 3. 调用 Sparse Marching Cubes
+    // 调用 Sparse Marching Cubes
     // =========================================================
     if (GI.rows() > 0) {
         igl::marching_cubes(S, GV, GI, isovalue, V_out, F_out);

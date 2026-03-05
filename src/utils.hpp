@@ -155,18 +155,16 @@ int CountSelfIntersections(
 {
     using Kernel = CGAL::Exact_predicates_inexact_constructions_kernel;
 
-    // libigl 参数
     igl::copyleft::cgal::RemeshSelfIntersectionsParam params;
-    params.detect_only = true;  // 关键：只检测，不remesh
+    params.detect_only = true;
 
-    // 这些输出我们不关心，但构造器需要
     Eigen::MatrixXd VV;
     Eigen::MatrixXi FF;
     Eigen::MatrixXi IF;
     Eigen::VectorXi J;
     Eigen::VectorXi IM;
 
-    // 构造 SelfIntersectMesh 实例
+    // 构造 SelfIntersectMesh
     igl::copyleft::cgal::SelfIntersectMesh<
         Kernel,
         Eigen::MatrixXd,
@@ -178,7 +176,6 @@ int CountSelfIntersections(
         Eigen::VectorXi
     > SIM(V, F, params, VV, FF, IF, J, IM);
 
-    // 关键：自交三角形对数量
     return static_cast<int>(SIM.count);
 }
 
@@ -231,7 +228,7 @@ MeshCheckResult CheckMesh(
     }
 
     // =====================================================
-    // 1️⃣ 构建 非流形安全 Edge -> Faces 邻接
+    // 构建 非流形安全 Edge -> Faces 邻接
     // =====================================================
 
     std::unordered_map<EdgeKey, std::vector<int>, EdgeKeyHash> edgeFaces;
@@ -258,7 +255,7 @@ MeshCheckResult CheckMesh(
     }
 
     // =====================================================
-    // 2️⃣ 统计边界 & 非流形边
+    // 统计边界 & 非流形边
     // =====================================================
 
     std::vector<bool> is_boundary_face(F.rows(), false);
@@ -280,7 +277,7 @@ MeshCheckResult CheckMesh(
     }
 
     // =====================================================
-    // 3️⃣ 统计边界面
+    // 统计边界面
     // =====================================================
 
     for (int i = 0; i < F.rows(); ++i)
@@ -288,11 +285,8 @@ MeshCheckResult CheckMesh(
             result.num_boundary_faces++;
 
     // =====================================================
-    // 4️⃣ 非流形顶点检测
-    // 定义：其 incident faces 不构成单连通扇形
+    // 非流形顶点检测
     // =====================================================
-
-    // vertex -> incident faces
     std::vector<std::vector<int>> vertexFaces(V.rows());
 
     for (int f = 0; f < F.rows(); ++f)

@@ -28,8 +28,6 @@
 #include <omp.h>
 
 
-// 1. 定义哈希函数，用于将 Eigen::RowVector3i (grid 索引) 用作 unordered_map 的 Key
-// 这里使用简单的位操作哈希，适用于一般的 Grid 分辨率。
 struct Vector3iHash {
     std::size_t operator()(const Eigen::RowVector3i& k) const {
         using std::size_t;
@@ -42,11 +40,10 @@ struct Vector3iHash {
     }
 };
 
-// 存储在 Grid 角点上的数据
 struct GridNode {
-    double sdf;                 // 符号距离
-    Eigen::RowVector3d normal;  // 最近点法线
-    Eigen::RowVector3d position;// 世界坐标
+    double sdf;
+    Eigen::RowVector3d normal;
+    Eigen::RowVector3d position;
 };
 
 class SparseSDFGrid {
@@ -54,7 +51,7 @@ public:
     // 存储所有活跃的角点数据，Key 是 Grid 索引 (i,j,k)
     std::unordered_map<Eigen::RowVector3i, GridNode, Vector3iHash> sparse_nodes;
 
-    // 存储所有活跃的体素 (Cell) 索引 (可选，如果后续只关心点，可以不存)
+    // 存储所有活跃的体素 (Cell) 索引
     std::vector<Eigen::RowVector3i> active_cells;
 
     double cell_size;

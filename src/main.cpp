@@ -315,19 +315,16 @@
 #include <cmath>
 #include <array>
 
-// Polyscope
 #include "polyscope/polyscope.h"
 #include "polyscope/surface_mesh.h"
 
-// libigl
 #include <igl/read_triangle_mesh.h>
 #include <igl/write_triangle_mesh.h>
 #include <igl/file_dialog_open.h>
 #include <igl/file_dialog_save.h>
 
-// 算法头文件
 #include "sparseGrid.hpp"
-#include "utils.hpp" // ✨ 直接使用你的 utils.hpp
+#include "utils.hpp"
 
 // ==========================================================
 // 全局状态与多网格数据
@@ -341,7 +338,7 @@ Eigen::MatrixXi* F_active = nullptr;
 
 SparseSDFGrid* active_sgrid = nullptr;
 
-// ✨ 重构：使用单一整数记录当前激活的网格 (0:无, 1:Target, 2:Opt, 3:Denoise)
+//使用单一整数记录当前激活的网格 (0:无, 1:Target, 2:Opt, 3:Denoise)
 int active_mesh_id = 0;
 
 // 渲染控制状态
@@ -371,9 +368,7 @@ MeshCheckResult ui_check_result;
 int sdf_method = 0; // 0: Flood Fill, 1: Winding Number
 float winding_threshold = 0.5f;
 
-// ==========================================================
-// 统一刷新渲染材质
-// ==========================================================
+
 void ApplyGlobalRenderSettings() {
     polyscope::view::bgColor = { bg_color[0], bg_color[1], bg_color[2] };
     float edge_w = show_edges ? 1.0f : 0.0f;
@@ -390,29 +385,20 @@ void ApplyGlobalRenderSettings() {
     }
 }
 
-// ==========================================================
-// ✨ 核心逻辑重构：严格单选互斥，彻底消灭“幽灵网格”
-// ==========================================================
 void SetActiveMesh(int mesh_id) {
     active_mesh_id = mesh_id;
 
-    // 强行同步 Polyscope 底层的渲染状态，只允许选中的那个 mesh 渲染
     if (polyscope::hasSurfaceMesh("1. Target"))   polyscope::getSurfaceMesh("1. Target")->setEnabled(mesh_id == 1);
     if (polyscope::hasSurfaceMesh("2. Optimized")) polyscope::getSurfaceMesh("2. Optimized")->setEnabled(mesh_id == 2);
     if (polyscope::hasSurfaceMesh("3. Denoised")) polyscope::getSurfaceMesh("3. Denoised")->setEnabled(mesh_id == 3);
 
-    // 更新指针，确保 CheckMesh 和 Save 永远操作你眼前的网格
     if (mesh_id == 1) { V_active = &V_target;  F_active = &F_target; }
     if (mesh_id == 2) { V_active = &V_opt;     F_active = &F_opt; }
     if (mesh_id == 3) { V_active = &V_denoise; F_active = &F_denoise; }
 
-    // 切换网格时，强制隐藏旧的检测结果
     show_check_results = false;
 }
 
-// ==========================================================
-// UI 布局回调
-// ==========================================================
 void ApplicationCallback() {
 
     // 全局线程锁：只要后台在算，就锁定文件导入等危险操作
@@ -442,17 +428,17 @@ void ApplicationCallback() {
     // --------------------------------------------------------
     ImGui::TextDisabled("--- Mesh I/O & View ---");
 
-    ImGui::BeginDisabled(is_busy); // 防止在计算时手滑乱点
+    ImGui::BeginDisabled(is_busy); 
     if (ImGui::Button("Load Mesh...", ImVec2(-1, 0))) {
         std::string filename = igl::file_dialog_open();
         if (!filename.empty() && igl::read_triangle_mesh(filename, V_target, F_target)) {
 
-            // ✨ 彻底清场：杀掉 Polyscope 里所有的旧结构，清空 Eigen 矩阵
+            //清空 Eigen 矩阵
             polyscope::removeAllStructures();
             V_opt.resize(0, 0); F_opt.resize(0, 0);
             V_denoise.resize(0, 0); F_denoise.resize(0, 0);
 
-            // 注册新靶标网格，强制切换到 Target 状态
+            // 注册新网格，强制切换到 Target 状态
             polyscope::registerSurfaceMesh("1. Target", V_target, F_target);
             SetActiveMesh(1);
 
@@ -462,7 +448,6 @@ void ApplicationCallback() {
     }
     ImGui::EndDisabled();
 
-    // ✨ 重构：将 Checkbox 替换为 RadioButton，实现“选项卡”式的完美互斥
     if (V_target.rows() > 0) {
         if (ImGui::RadioButton("Show 1. Target Mesh", active_mesh_id == 1)) SetActiveMesh(1);
     }
@@ -499,7 +484,7 @@ void ApplicationCallback() {
     ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
 
     // --------------------------------------------------------
-    // 3. 隐式优化
+    // 3. 优化
     // --------------------------------------------------------
     ImGui::TextDisabled("--- SDF Optimization ---");
     ImGui::InputInt("Resolution", &grid_resolution);
