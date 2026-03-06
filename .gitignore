@@ -17,6 +17,7 @@ CMakeCache.txt
 assets/*
 !assets/
 !assets/car.ply
+!assets/chair_0005.off
 
 # runtime
 .polyscope.ini

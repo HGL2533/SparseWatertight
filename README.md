@@ -72,7 +72,7 @@ https://ieeexplore.ieee.org/document/5674028
 
 ---
 
-## 3. 配置与依赖
+## 4. 数据和可执行文件
 
 仓库中包含一个示例模型：
 
