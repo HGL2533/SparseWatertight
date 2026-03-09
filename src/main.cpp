@@ -35,8 +35,8 @@ int active_mesh_id = 0;
 // 渲染控制状态
 std::array<float, 3> bg_color = { 0.95f, 0.95f, 0.95f };
 std::array<float, 3> mesh_color = { 0.47f, 0.50f, 0.77f };
-bool show_edges = true;
-bool enable_ssaa = true; 
+bool show_edges = false;
+bool enable_ssaa = false; 
 bool normal_render = false;
 
 // UI 算法参数

@@ -32,7 +32,6 @@ struct Vector3iHash {
     std::size_t operator()(const Eigen::RowVector3i& k) const {
         using std::size_t;
         using std::hash;
-        // 简单的空间哈希组合 (类似 boost::hash_combine)
         size_t h1 = hash<int>()(k(0));
         size_t h2 = hash<int>()(k(1));
         size_t h3 = hash<int>()(k(2));
@@ -75,7 +74,7 @@ public:
         int NormalIterNum = 10,
         int VertexIterNum = 10);
 
-    void extract_mesh(Eigen::MatrixXd& V_out, Eigen::MatrixXi& F_out);
+    void extract_mesh_dc(Eigen::MatrixXd& V_out, Eigen::MatrixXi& F_out);
     void extract_mesh_mc(Eigen::MatrixXd& V_out, Eigen::MatrixXi& F_out, double isovalue = 0.0);
     void extract_mesh_tets(Eigen::MatrixXd& V_out, Eigen::MatrixXi& F_out, double isovalue = 0.0);
     
