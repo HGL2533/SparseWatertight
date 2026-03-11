@@ -80,6 +80,6 @@ https://ieeexplore.ieee.org/document/5674028
 assets/car.ply
 ```
 
-后续将提供可直接运行的 `.exe` 可执行文件版本。
+exe文件夹下是可执行文件
 
 
